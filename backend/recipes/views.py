@@ -7,7 +7,7 @@ from rest_framework.permissions import (AllowAny, IsAuthenticated,
                                       IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
 
-from api.pagination import CustomPagination
+from api.pagination import CustomPageNumberPagination
 from api.permissions import IsOwnerOrReadOnly
 from recipes.filters import IngredientFilter, DishFilter
 from recipes.models import (FavoriteRecipe, Ingredient, RecipeIngredient, Dish,
@@ -28,7 +28,7 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DishViewSet(viewsets.ModelViewSet):
     queryset = Dish.objects.all()
-    pagination_class = CustomPagination
+    pagination_class = CustomPageNumberPagination
     permission_classes = (IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly)
     filter_backends = (DjangoFilterBackend,)
     filterset_class = DishFilter

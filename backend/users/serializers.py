@@ -1,16 +1,16 @@
 from rest_framework import serializers
 
-from api.serializers import UserProfileSerializer
-from recipes.serializers import ShortRecipeSerializer
+from api.serializers import UserReadSerializer
+from recipes.serializers import DishShortSerializer
 from users.models import Follow
 
 
-class FollowSerializer(UserProfileSerializer):
+class FollowSerializer(UserReadSerializer):
     recipes = serializers.SerializerMethodField(method_name="get_recipes")
     recipes_amount = serializers.ReadOnlyField(source="recipes.count", read_only=True)
 
-    class Meta(UserProfileSerializer.Meta):
-        fields = (*UserProfileSerializer.Meta.fields, 'recipes', 'recipes_amount')
+    class Meta(UserReadSerializer.Meta):
+        fields = (*UserReadSerializer.Meta.fields, 'recipes', 'recipes_amount')
 
     def get_recipes(self, obj):
         ctx = self.context['request']
@@ -20,7 +20,7 @@ class FollowSerializer(UserProfileSerializer):
         if limit_param and limit_param.isdigit():
             queryset = queryset[:int(limit_param)]
         
-        return ShortRecipeSerializer(
+        return DishShortSerializer(
             queryset,
             context={'request': ctx},
             many=True
@@ -37,7 +37,7 @@ class FollowCreateSerializer(serializers.ModelSerializer):
             write_only_fields = ('author', 'follower')
 
     def get_cooking_items(self, sub_obj):
-        return ShortRecipeSerializer(
+        return DishShortSerializer(
             sub_obj.author.recipes.all(),
             context=self.context,
             many=True
@@ -47,7 +47,7 @@ class FollowCreateSerializer(serializers.ModelSerializer):
         return sub_obj.author.recipes.count()
 
     def to_representation(self, sub_instance):
-        author_data = UserProfileSerializer(
+        author_data = UserReadSerializer(
             sub_instance.author,
             context=self.context
         ).data

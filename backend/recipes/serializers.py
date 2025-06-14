@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from api.fields import Base64ImageField
-from api.serializers import UserProfileSerializer
+from api.serializers import UserReadSerializer
 from foodgram.constants import INGREDIENT_RECIPE_MIN_AMOUNT
 from recipes.models import (FavoriteRecipe, Ingredient, RecipeIngredient, Dish,
                           ShoppingList)
@@ -27,7 +27,7 @@ class BasicIngredientSerializer(serializers.ModelSerializer):
 
 
 class DishDetailSerializer(serializers.ModelSerializer):
-    chef = UserProfileSerializer()
+    chef = UserReadSerializer()
     composition = RecipeIngredientSerializer(many=True)
     is_favorite = serializers.SerializerMethodField()
     in_shopping_list = serializers.SerializerMethodField()

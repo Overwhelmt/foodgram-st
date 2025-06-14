@@ -5,7 +5,7 @@ from rest_framework.exceptions import ValidationError
 
 
 class Base64ImageField(serializers.ImageField):
-    """Пыоле для обработки изображений в формате base64."""
+    """Поле для обработки изображений в формате base64."""
     
     def to_internal_value(self, base64_data):
         if not isinstance(base64_data, str):
