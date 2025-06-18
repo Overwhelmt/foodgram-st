@@ -69,7 +69,7 @@ class CustomUserViewSet(UserViewSet):
     )
     def list_followings(self, request):
         followings = User.objects.filter(
-            subscriptions_where_author__subscriber=request.user
+            creator_subscriptions__follower=request.user
         )
         page = self.paginate_queryset(followings)
         serializer = FollowCreateSerializer(
@@ -93,7 +93,7 @@ class CustomUserViewSet(UserViewSet):
     def _create_follow(self, request, user_id):
         serializer = FollowCreateSerializer(
             data={
-                'subscriber': request.user.id,
+                'follower': request.user.id,
                 'author': user_id
             },
             context={'request': request}
@@ -106,7 +106,7 @@ class CustomUserViewSet(UserViewSet):
         try:
             author = User.objects.get(pk=user_id)
             subscription = Follow.objects.get(
-                subscriber=request.user,
+                follower=request.user,
                 author=author
             )
             subscription.delete()

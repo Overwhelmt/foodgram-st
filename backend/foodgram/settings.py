@@ -7,12 +7,12 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-a-3nzzgu$p_0fl#%efko4+=wo#b5jtpabxzgwzo-_w9f*0m578'
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'backend']
 CSRF_TRUSTED_ORIGINS = ["http://127.0.0.1"]
 
 
@@ -71,7 +71,7 @@ WSGI_APPLICATION = 'foodgram.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("DB_ENGINE", default="django.db.backends.sqlite3"),
-        "NAME": os.getenv("DB_NAME", default=(BASE_DIR / "db.sqlite3")),
+        "NAME": os.getenv("DB_NAME"),
         "USER": os.getenv("POSTGRES_USER", default=None),
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", default=None),
         "HOST": os.getenv("DB_HOST", default=None),
@@ -79,7 +79,7 @@ DATABASES = {
     }
 }
 
-
+AUTH_USER_MODEL = 'users.User'
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -131,9 +131,9 @@ DJOSER = {
     "PASSWORD_CHANGED_EMAIL_CONFIRMATION": False,
     "TOKEN_MODEL": "rest_framework.authtoken.models.Token",
     "SERIALIZERS": {
-        "user": "api.serializers.UserProfileSerializer",
-        "user_create": "api.serializers.CreateUserProfileSerializer",
-        "current_user": "api.serializers.UserProfileSerializer",
+        "user": "api.serializers.UserReadSerializer",
+        "user_create": "api.serializers.UserCreateSerializer",
+        "current_user": "api.serializers.UserReadSerializer",
     },
     "PERMISSIONS": {
         "user": ["djoser.permissions.CurrentUserOrAdminOrReadOnly"],

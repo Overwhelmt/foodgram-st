@@ -31,7 +31,7 @@ class UserReadSerializer(UserCreateSerializer):
         return (
             request and
             request.user.is_authenticated and
-            request.user.subscriptions_where_subscriber.filter(author=obj).exists()
+            request.user.user_subscriptions.filter(author=obj).exists()
         )
 
 

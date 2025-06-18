@@ -1,49 +1,61 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.core.validators import RegexValidator
 from django.db import models
 
-from foodgram.constants import (PROFILE_IMAGE_FOLDER, MAX_EMAIL_LENGTH,
-                            MAX_FIRSTNAME_LENGTH, MAX_LASTNAME_LENGTH,
-                            MAX_LOGIN_LENGTH, LOGIN_REGEX_PATTERN)
+from foodgram.constants import (USER_AVATAR_STORAGE_PATH, USER_EMAIL_MAX_LEN,
+                            USER_FIRST_NAME_MAX_LEN, USER_LAST_NAME_MAX_LEN,
+                            USER_USERNAME_MAX_LEN, USERNAME_VALIDATION_REGEX)
 
 
 class User(AbstractUser):
-    AUTH_FIELD = "email"
-    REQUIRED_DATA = ["login", "first_name", "last_name"]
 
     email = models.EmailField(
         verbose_name="Электронная почта",
-        max_length=MAX_EMAIL_LENGTH,
+        max_length=USER_EMAIL_MAX_LEN,
         unique=True,
     )
-    login = models.CharField(
+    username = models.CharField(
         verbose_name="Логин",
-        max_length=MAX_LOGIN_LENGTH,
+        max_length=USER_USERNAME_MAX_LEN,
         unique=True,
         db_index=True,
-        validators=[RegexValidator(regex=LOGIN_REGEX_PATTERN)],
+        validators=[RegexValidator(regex=USERNAME_VALIDATION_REGEX)],
     )
     first_name = models.CharField(
         verbose_name="Имя",
-        max_length=MAX_FIRSTNAME_LENGTH,
+        max_length=USER_FIRST_NAME_MAX_LEN,
     )
     last_name = models.CharField(
         verbose_name="Фамилия",
-        max_length=MAX_LASTNAME_LENGTH,
+        max_length=USER_LAST_NAME_MAX_LEN,
     )
     profile_image = models.ImageField(
         verbose_name="Фото профиля",
-        upload_to=PROFILE_IMAGE_FOLDER,
+        upload_to=USER_AVATAR_STORAGE_PATH,
         blank=True,
+    )
+    groups = models.ManyToManyField(
+        Group,
+        verbose_name='Группы',
+        blank=True,
+        related_name="custom_user_set",  
+        help_text='The groups this user belongs to.',
+    )
+    user_permissions = models.ManyToManyField(
+        Permission,
+        verbose_name='user permissions',
+        blank=True,
+        related_name="custom_user_permissions_set",
+        help_text='Specific permissions for this user.',
     )
 
     class Meta:
-        verbose_name = "Аккаунт"
-        verbose_name_plural = "Аккаунты"
-        ordering = ("login",)
+        verbose_name = "Профиль"
+        verbose_name_plural = "Профили"
+        ordering = ("username",)
 
     def __str__(self):
-        return self.login
+        return self.username
 
 
 class Follow(models.Model):
@@ -69,7 +81,7 @@ class Follow(models.Model):
                 name="no_duplicate_follows"
             )
         ]
-        ordering = ("author__login",)
+        ordering = ("author__username",)
 
     def __str__(self):
         return f"{self.follower} {self.author}"
