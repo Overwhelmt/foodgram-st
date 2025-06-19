@@ -32,10 +32,6 @@ class RecipeAdmin(ModelAdmin):
     readonly_fields = ("favorites_count",)
     date_hierarchy = "publication_date"
 
-    @admin.display(description="В избранном")
-    def favorites_count(self, obj):
-        return obj.favorites.count()
-
 
 @register(RecipeIngredient)
 class RecipeCompositionAdmin(ModelAdmin):
