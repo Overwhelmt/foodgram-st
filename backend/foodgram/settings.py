@@ -131,6 +131,7 @@ DJOSER = {
     "PASSWORD_CHANGED_EMAIL_CONFIRMATION": False,
     "TOKEN_MODEL": "rest_framework.authtoken.models.Token",
     "SERIALIZERS": {
+        "token_create": "api.serializers.CustomTokenCreateSerializer",
         "user": "api.serializers.UserReadSerializer",
         "user_create": "api.serializers.UserCreateSerializer",
         "current_user": "api.serializers.UserReadSerializer",

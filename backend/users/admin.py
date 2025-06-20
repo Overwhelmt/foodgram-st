@@ -14,7 +14,7 @@ class CustomUserAdmin(UserAdmin):
         "first_name",
         "last_name",
         "password",
-        "profile_image",
+        "avatar",
         "authored_recipes_amount",
         "followers_amount",
     )
@@ -23,7 +23,7 @@ class CustomUserAdmin(UserAdmin):
 
     @admin.display(description="Авторских рецептов")
     def authored_recipes_amount(self, user_instance):
-        return user_instance.authored_dishes.count()
+        return user_instance.authored_recipes.count()
 
     @admin.display(description="Подписчиков")
     def followers_amount(self, user_instance):
@@ -33,7 +33,7 @@ class CustomUserAdmin(UserAdmin):
         (None, {"fields": ("username", "hashed_password")}),
         ("Персональная информация", {
          "fields": ("first_name", "last_name", "email")}),
-        ("Дополнительно", {"fields": ("profile_image",)}),
+        ("Дополнительно", {"fields": ("avatar",)}),
     )
     add_fieldsets = (
         (None, {

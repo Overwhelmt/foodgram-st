@@ -14,7 +14,8 @@ services:
     restart: unless-stopped
 
   backend:
-    image: overwhelmd/foodgram_backend:latest
+    # image: overwhelmd/foodgram_backend:latest
+    image: foodgram_backend:latest
     container_name: foodgram_backend
     volumes:
       - static_volume:/app/static
@@ -27,7 +28,8 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: overwhelmd/foodgram_frontend:latest
+    # image: overwhelmd/foodgram_frontend:
+    image: foodgram_frontend:latest
     container_name: foodgram_frontend
     volumes:
       - ./frontend:/app/result_build

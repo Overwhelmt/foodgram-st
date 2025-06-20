@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from recipes.views import DishViewSet
+from recipes.views import RecipeViewSet
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -10,7 +10,7 @@ urlpatterns = [
     
     path(
         "s/<int:pk>/",
-        DishViewSet.as_view({"get": "retrieve"}),
+        RecipeViewSet.as_view({"get": "retrieve"}),
         name="recipe-short-link"
     ),
 

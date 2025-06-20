@@ -1,21 +1,25 @@
+# recipes/views.py
+
 from django.db.models import Sum
 from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import (AllowAny, IsAuthenticated,
-                                      IsAuthenticatedOrReadOnly)
+                                        IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.urls import reverse
 
 from api.pagination import CustomPageNumberPagination
 from api.permissions import IsOwnerOrReadOnly
-from recipes.filters import IngredientFilter, DishFilter
-from recipes.models import (FavoriteRecipe, Ingredient, RecipeIngredient, Dish,
-                          ShoppingList)
-from recipes.serializers import (DishCreateUpdateSerializer, FavoriteSerializer,
-                               DishDetailSerializer, ShoppingListSerializer,
-                               BasicIngredientSerializer)
-
+from recipes.filters import IngredientFilter, RecipeFilter
+from recipes.models import (FavoriteRecipe, Ingredient, RecipeIngredient, Recipe,
+                            ShoppingList)
+# ИЗМЕНЕНО: импорты сериализаторов обновлены
+from recipes.serializers import (RecipeCreateSerializer, FavoriteSerializer,
+                                 RecipeListSerializer, ShoppingListSerializer,
+                                 BasicIngredientSerializer, RecipeMinifiedSerializer)
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
@@ -23,105 +27,94 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
     filter_backends = (DjangoFilterBackend,)
     filterset_class = IngredientFilter
-    search_fields = ("^title",)
+    # Убираем search_fields, т.к. фильтрация уже определена в IngredientFilter
+    # search_fields = ("^name",)
 
 
-class DishViewSet(viewsets.ModelViewSet):
-    queryset = Dish.objects.all()
+class RecipeViewSet(viewsets.ModelViewSet):
+    queryset = Recipe.objects.all().order_by('-publication_date')
     pagination_class = CustomPageNumberPagination
     permission_classes = (IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly)
     filter_backends = (DjangoFilterBackend,)
-    filterset_class = DishFilter
+    filterset_class = RecipeFilter
 
     def get_serializer_class(self):
+        # ИЗМЕНЕНО: сериализаторы для разных действий
         if self.action in ("list", "retrieve"):
-            return DishDetailSerializer
-        return DishCreateUpdateSerializer
+            return RecipeListSerializer
+        return RecipeCreateSerializer
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context["request"] = self.request
         return context
 
+    def _add_or_remove_relation(self, request, pk, serializer_class, model_class, error_message):
+        recipe = get_object_or_404(Recipe, pk=pk)
+        
+        if request.method == "POST":
+            if model_class.objects.filter(user=request.user, recipe=recipe).exists():
+                return Response({'errors': error_message['already_exists']}, status=status.HTTP_400_BAD_REQUEST)
+            serializer = serializer_class(data={'user': request.user.id, 'recipe': recipe.id}, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            # ИЗМЕНЕНО: Ответ соответствует схеме RecipeMinified
+            response_serializer = RecipeMinifiedSerializer(recipe)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+        if request.method == "DELETE":
+            if not model_class.objects.filter(user=request.user, recipe=recipe).exists():
+                return Response({'errors': error_message['not_exists']}, status=status.HTTP_400_BAD_REQUEST)
+            model_class.objects.filter(user=request.user, recipe=recipe).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(
         detail=True,
-        methods=("post", "delete"),
-        permission_classes=(IsAuthenticated,),
-        url_path="mark-favorite",
+        methods=["post", "delete"],
+        permission_classes=[IsAuthenticated],
+        # ИЗМЕНЕНО: url_path соответствует спецификации
+        url_path="favorite",
     )
-    def favorite_action(self, request, pk=None):
-        if request.method == "POST":
-            return self._create_relation(
-                request, pk, FavoriteSerializer
-            )
-        return self._remove_relation(
-            request,
-            pk,
-            "favorited_by",
-            FavoriteRecipe.DoesNotExist,
-            "Рецепт не в избранном"
+    def favorite(self, request, pk=None):
+        return self._add_or_remove_relation(
+            request, pk, FavoriteSerializer, FavoriteRecipe,
+            {'already_exists': 'Рецепт уже в избранном', 'not_exists': 'Рецепта нет в избранном'}
         )
 
     @action(
         detail=True,
-        methods=("post", "delete"),
-        permission_classes=(IsAuthenticated,),
-        url_path="add-to-cart",
+        methods=["post", "delete"],
+        permission_classes=[IsAuthenticated],
+        # ИЗМЕНЕНО: url_path соответствует спецификации
+        url_path="shopping_cart",
     )
-    def shopping_cart_action(self, request, pk=None):
-        if request.method == "POST":
-            return self._create_relation(
-                request, pk, ShoppingListSerializer
-            )
-        return self._remove_relation(
-            request,
-            pk,
-            "in_shopping_lists",
-            ShoppingList.DoesNotExist,
-            "Рецепт не в списке покупок"
+    def shopping_cart(self, request, pk=None):
+        return self._add_or_remove_relation(
+            request, pk, ShoppingListSerializer, ShoppingList,
+            {'already_exists': 'Рецепт уже в списке покупок', 'not_exists': 'Рецепта нет в списке покупок'}
         )
-
-    def _create_relation(self, request, pk, serializer_class):
-        serializer = serializer_class(
-            data={
-                "user": request.user.id,
-                "dish": pk,
-            },
-            context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def _remove_relation(self, request, pk, relation_name, 
-                        exception_class, error_message):
-        try:
-            getattr(request.user, relation_name).filter(dish_id=pk).delete()
-        except exception_class:
-            return Response(
-                {"error": error_message},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
-        methods=("get",),
-        permission_classes=(IsAuthenticated,),
-        url_path="export-shopping-list",
+        methods=["get",],
+        permission_classes=[IsAuthenticated],
+        # ИЗМЕНЕНО: url_path соответствует спецификации
+        url_path="download_shopping_cart",
     )
-    def export_shopping_list(self, request):
+    def download_shopping_cart(self, request):
         ingredients = (
             RecipeIngredient.objects.filter(
-                dish__in_shopping_lists__user=request.user
+                # ИЗМЕНЕНО: shopping_cart_items - новый related_name
+                recipe__shopping_cart_items__user=request.user
             )
-            .values("ingredient__title", "ingredient__unit")
-            .annotate(total=Sum("quantity"))
-            .order_by("ingredient__title")
+            .values("ingredient__name", "ingredient__measurement_unit")
+            .annotate(total=Sum("amount"))
+            .order_by("ingredient__name")
         )
         
-        shopping_list = "\n".join(
-            f"{item['ingredient__title']} - {item['total']} {item['ingredient__unit']}"
+        shopping_list = "Список покупок:\n\n"
+        shopping_list += "\n".join(
+            f"- {item['ingredient__name']} ({item['ingredient__measurement_unit']}) — {item['total']}"
             for item in ingredients
         )
         
@@ -131,12 +124,14 @@ class DishViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=True,
-        methods=("get",),
-        permission_classes=(IsAuthenticatedOrReadOnly,),
-        url_path="share-link",
+        methods=["get",],
+        permission_classes=[AllowAny],
+        # ИЗМЕНЕНО: url_path и логика соответствуют спецификации
+        url_path="get-link",
     )
-    def share_dish_link(self, request, pk=None):
-        dish = self.get_object()
+    def get_short_link(self, request, pk=None):
+        # ИЗМЕНЕНО: генерация короткой ссылки через reverse
+        short_link = request.build_absolute_uri(reverse('recipe-short-link', kwargs={'pk': pk}))
         return Response({
-            "share_url": f"{request.build_absolute_uri('/')}dishes/{dish.id}"
+            "short-link": short_link
         })

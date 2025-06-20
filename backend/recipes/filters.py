@@ -1,7 +1,7 @@
 import django_filters
 from django_filters.rest_framework import FilterSet, filters
 
-from recipes.models import Ingredient, Dish
+from recipes.models import Ingredient, Recipe
 
 
 class IngredientFilter(FilterSet):
@@ -16,7 +16,7 @@ class IngredientFilter(FilterSet):
         fields = ("name",)
 
 
-class DishFilter(FilterSet):
+class RecipeFilter(FilterSet):
     author = filters.NumberFilter(
         field_name="author__id",
         help_text="ID автора рецепта"
@@ -32,20 +32,16 @@ class DishFilter(FilterSet):
 
     def filter_favorites(self, queryset, name, value):
         if value and self.request.user.is_authenticated:
-            return queryset.filter(
-                favorites__user=self.request.user
-            )
+            return queryset.filter(favorited_by__user=self.request.user)
         return queryset
 
     def filter_shopping_cart(self, queryset, name, value):
         if value and self.request.user.is_authenticated:
-            return queryset.filter(
-                shopping_carts__user=self.request.user
-            )
+            return queryset.filter(shopping_cart_items__user=self.request.user)
         return queryset
 
     class Meta:
-        model = Dish
+        model = Recipe
         fields = (
             "author",
             "is_favorited",

@@ -1,25 +1,28 @@
 from djoser.views import UserViewSet
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from rest_framework.exceptions import NotFound
+from django.shortcuts import get_object_or_404
 
 from api.pagination import CustomPageNumberPagination
-from api.serializers import (UserReadSerializer, UserCreateSerializer, 
-                            UserAvatarUpdateSerializer)
+from api.serializers import (UserReadSerializer, CustomUserCreateSerializer, 
+                             SetAvatarSerializer, UserCreateResponseSerializer)
 from users.models import Follow, User
-from users.serializers import (FollowCreateSerializer, FollowCreateSerializer)
+from users.serializers import UserWithRecipesSerializer, SubscribeSerializer
 
 
 class CustomUserViewSet(UserViewSet):
     queryset = User.objects.all()
     pagination_class = CustomPageNumberPagination
-    permission_classes = (IsAuthenticatedOrReadOnly,)
+    permission_classes = (AllowAny,) # Позволяем чтение всем
 
     def get_serializer_class(self):
         if self.action == 'create':
-            return UserCreateSerializer
+            return CustomUserCreateSerializer
+        # ИЗМЕНЕНО: Для подписок используется UserWithRecipesSerializer
+        if self.action == 'subscriptions':
+            return UserWithRecipesSerializer
         return UserReadSerializer
 
     @action(
@@ -29,7 +32,7 @@ class CustomUserViewSet(UserViewSet):
         url_path='me'
     )
     def get_current_user(self, request):
-        serializer = self.get_serializer(request.user)
+        serializer = UserReadSerializer(request.user, context={'request': request})
         return Response(serializer.data)
 
     @action(
@@ -39,85 +42,75 @@ class CustomUserViewSet(UserViewSet):
         url_path='me/avatar'
     )
     def manage_avatar(self, request):
-        if request.method == 'PUT':
-            return self._update_avatar(request)
-        return self._delete_avatar(request)
-
-    def _update_avatar(self, request):
-        serializer = UserAvatarUpdateSerializer(
-            request.user, 
-            data=request.data,
-            partial=True
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def _delete_avatar(self, request):
         user = request.user
-        if user.avatar:
-            user.avatar.delete()
-            user.avatar = None
-            user.save()
+        if request.method == 'PUT':
+            serializer = SetAvatarSerializer(user, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        user.avatar.delete()
+        user.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         methods=['get'],
         detail=False,
         permission_classes=[IsAuthenticated],
-        url_path='followings'
+        # ИЗМЕНЕНО: url_path соответствует спецификации
+        url_path='subscriptions'
     )
-    def list_followings(self, request):
-        followings = User.objects.filter(
-            creator_subscriptions__follower=request.user
-        )
-        page = self.paginate_queryset(followings)
-        serializer = FollowCreateSerializer(
-            page, 
-            many=True, 
-            context={'request': request}
-        )
+    def subscriptions(self, request):
+        followed_users = User.objects.filter(followers__follower=request.user)
+        page = self.paginate_queryset(followed_users)
+        serializer = self.get_serializer(page, many=True, context={'request': request})
         return self.get_paginated_response(serializer.data)
 
     @action(
         methods=['post', 'delete'],
         detail=True,
         permission_classes=[IsAuthenticated],
-        url_path='follow'
+        url_path='subscribe'
     )
-    def manage_follow(self, request, pk=None):
+    def subscribe(self, request, id=None):
+        author = get_object_or_404(User, id=id)
+
         if request.method == 'POST':
-            return self._create_follow(request, pk)
-        return self._delete_follow(request, pk)
+            serializer = SubscribeSerializer(
+                data={'follower': request.user.id, 'author': author.id},
+                context={'request': request}
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
 
-    def _create_follow(self, request, user_id):
-        serializer = FollowCreateSerializer(
-            data={
-                'follower': request.user.id,
-                'author': user_id
-            },
-            context={'request': request}
-        )
+        subscription = User.objects.filter(creator_subscriptions__follower=request.user)
+        if not subscription.exists():
+            return Response({'errors': 'Вы не были подписаны на этого пользователя.'}, status=status.HTTP_400_BAD_REQUEST)
+        subscription.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            UserCreateResponseSerializer(serializer.instance).data,
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
-    def _delete_follow(self, request, user_id):
-        try:
-            author = User.objects.get(pk=user_id)
-            subscription = Follow.objects.get(
-                follower=request.user,
-                author=author
-            )
-            subscription.delete()
-            return Response(
-                {'detail': f'Вы отписались от {author.login}'},
-                status=status.HTTP_204_NO_CONTENT
-            )
-        except User.DoesNotExist:
-            raise NotFound('Пользователь не найден')
-        except Follow.DoesNotExist:
-            return Response(
-                {'detail': 'Вы не подписаны на этого пользователя'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+            
+        return obj.author == request.user

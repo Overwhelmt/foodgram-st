@@ -1,65 +1,49 @@
 from rest_framework import serializers
 
 from api.serializers import UserReadSerializer
-from recipes.serializers import DishShortSerializer
+from recipes.serializers import RecipeMinifiedSerializer
 from users.models import Follow
 
 
-class FollowSerializer(UserReadSerializer):
-    recipes = serializers.SerializerMethodField(method_name="get_recipes")
-    recipes_amount = serializers.ReadOnlyField(source="recipes.count", read_only=True)
+class UserWithRecipesSerializer(UserReadSerializer):
+    recipes = serializers.SerializerMethodField()
+    recipes_count = serializers.IntegerField(source="recipes.count", read_only=True)
 
     class Meta(UserReadSerializer.Meta):
-        fields = (*UserReadSerializer.Meta.fields, 'recipes', 'recipes_amount')
+        fields = (*UserReadSerializer.Meta.fields, 'recipes', 'recipes_count')
 
     def get_recipes(self, obj):
-        ctx = self.context['request']
+        request = self.context.get('request')
+        recipes_limit = request.query_params.get('recipes_limit')
         queryset = obj.recipes.all()
-        limit_param = ctx.query_params.get('recipes_limit')
 
-        if limit_param and limit_param.isdigit():
-            queryset = queryset[:int(limit_param)]
+        if recipes_limit and recipes_limit.isdigit():
+            queryset = queryset[:int(recipes_limit)]
         
-        return DishShortSerializer(
+        return RecipeMinifiedSerializer(
             queryset,
-            context={'request': ctx},
+            context={'request': request},
             many=True
         ).data
 
 
-class FollowCreateSerializer(serializers.ModelSerializer):
-    recipes = serializers.SerializerMethodField()
-    recipes_amount = serializers.SerializerMethodField()
-
+class SubscribeSerializer(serializers.ModelSerializer):
     class Meta:
-            model = Follow
-            fields = ('author', 'follower', 'recipes', 'recipes_amount')
-            write_only_fields = ('author', 'follower')
+        model = Follow
+        fields = ('author', 'follower')
 
-    def get_cooking_items(self, sub_obj):
-        return DishShortSerializer(
-            sub_obj.author.recipes.all(),
-            context=self.context,
-            many=True
-        ).data
-    
-    def get_items_total(self, sub_obj):
-        return sub_obj.author.recipes.count()
-
-    def to_representation(self, sub_instance):
-        author_data = UserReadSerializer(
-            sub_instance.author,
+    def to_representation(self, instance):
+        # Возвращаем данные в формате UserWithRecipesSerializer
+        return UserWithRecipesSerializer(
+            instance.author,
             context=self.context
         ).data
-        
-        return {
-            **author_data,
-            **super().to_representation(sub_instance)
-        }
     
     def validate(self, attrs):
-        if attrs['follower'].id == attrs['author'].id:
-            raise serializers.ValidationError(
-                {'author': 'Нельзя быть подписанным на себя'}
-            )
+        follower = attrs['follower']
+        author = attrs['author']
+        if follower == author:
+            raise serializers.ValidationError('Нельзя подписаться на самого себя.')
+        if Follow.objects.filter(follower=follower, author=author).exists():
+            raise serializers.ValidationError('Вы уже подписаны на этого пользователя.')
         return attrs

@@ -29,7 +29,7 @@ class User(AbstractUser):
         verbose_name="Фамилия",
         max_length=USER_LAST_NAME_MAX_LEN,
     )
-    profile_image = models.ImageField(
+    avatar = models.ImageField(
         verbose_name="Фото профиля",
         upload_to=USER_AVATAR_STORAGE_PATH,
         blank=True,
